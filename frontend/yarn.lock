@@ -2780,17 +2780,17 @@
     "@svgr/plugin-svgo" "^5.5.0"
     loader-utils "^2.0.0"
 
-"@tanstack/query-core@5.14.1":
-  version "5.14.1"
-  resolved "https://registry.yarnpkg.com/@tanstack/query-core/-/query-core-5.14.1.tgz#4f7df092127124fdd2797cbd70ea469f878c12c5"
-  integrity sha512-TlZarySCVEiap4K7BCvrsYZnX7jBbEkR55YMrk8ELcRbuAx6ydL+qoxqUt8Fq8VMvQyGt52icn6T7eJL1Q35KQ==
+"@tanstack/query-core@5.17.1":
+  version "5.17.1"
+  resolved "https://registry.yarnpkg.com/@tanstack/query-core/-/query-core-5.17.1.tgz#341d975dce20c5c9e0767a3a69c0bfbc9ca16114"
+  integrity sha512-kUXozQmU7NBtzX5dM6qfFNZN+YK/9Ct37hnG/ogdgI4mExIx7VH/qRepsPhKfNrJz2w81/JykmM3Uug6sVpUSw==
 
-"@tanstack/react-query@^5.14.1":
-  version "5.14.1"
-  resolved "https://registry.yarnpkg.com/@tanstack/react-query/-/react-query-5.14.1.tgz#d56bfedaa4c75cbcfcec856d89848a225f3d4f15"
-  integrity sha512-v7jhe/3jhChiR0XJbGHaG5WNPd/cURwzDGBCr4rzpUTeudPzxrtVRKsF1xJRLcJK3qH/0gIwTYHIPZ3gj+01Yw==
+"@tanstack/react-query@^5.17.1":
+  version "5.17.1"
+  resolved "https://registry.yarnpkg.com/@tanstack/react-query/-/react-query-5.17.1.tgz#37efbb4573d3f4cc8c62e5ea6c7398d27f52db2a"
+  integrity sha512-4JYgX0kU+pvwVQi5eRiHGvBK7WnahEl6lmaxd32ZVSKmByAxLgaewoxBR03cdDNse8lUD2zGOe0sx3M/EGRlmA==
   dependencies:
-    "@tanstack/query-core" "5.14.1"
+    "@tanstack/query-core" "5.17.1"
 
 "@testing-library/dom@^9.0.0":
   version "9.3.3"
