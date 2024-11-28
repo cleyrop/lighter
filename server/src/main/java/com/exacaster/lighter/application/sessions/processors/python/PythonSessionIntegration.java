@@ -95,7 +95,10 @@ public class PythonSessionIntegration implements StatementHandler {
 
     @Override
     public boolean hasWaitingStatement(Application application) {
+        LOG.info("Checking for waiting statements for {}", application.getAppId());
         var waitingStatements = statementStorage.findByState(application.getAppId(), "waiting");
+        LOG.info("Has {} waiting statements", waitingStatements.size());
+        LOG.info("Has waiting statements: {}", !waitingStatements.isEmpty());
         return !waitingStatements.isEmpty();
     }
 }
