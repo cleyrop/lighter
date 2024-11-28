@@ -8,6 +8,10 @@ public final class SessionUtils {
     }
 
     public static ApplicationState adjustState(boolean noWaitingStatements, ApplicationState state) {
-        return state.equals(ApplicationState.BUSY) && noWaitingStatements ? ApplicationState.IDLE : state;
+        return switch (state) {
+            case BUSY -> noWaitingStatements ? ApplicationState.IDLE : state;
+            case IDLE -> noWaitingStatements ? state : ApplicationState.BUSY;
+            default -> state;
+        };
     }
 }
