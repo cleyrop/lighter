@@ -15,13 +15,15 @@ public class Statement {
     private final Output output;
     private final String state;
     private final LocalDateTime createdAt;
+    private final LocalDateTime finishedAt;
 
-    public Statement(@Nullable String id, String code, @Nullable Output output, @Nullable String state, LocalDateTime createdAt) {
+    public Statement(@Nullable String id, String code, @Nullable Output output, @Nullable String state, LocalDateTime createdAt, @Nullable LocalDateTime finishedAt) {
         this.id = id;
         this.code = code;
         this.output = output;
         this.state = state;
         this.createdAt = createdAt;
+        this.finishedAt = finishedAt;
     }
 
     public String getId() {
@@ -45,6 +47,10 @@ public class Statement {
         return createdAt;
     }
 
+    public LocalDateTime getFinishedAt() {
+        return finishedAt;
+    }
+
     @Override
     public String toString() {
         return new StringJoiner(", ", Statement.class.getSimpleName() + "[", "]")
@@ -53,6 +59,7 @@ public class Statement {
                 .add("output=" + output)
                 .add("state='" + state + "'")
                 .add("createdAt='" + createdAt + "'")
+                .add("finishedAt='" + finishedAt + "'")
                 .toString();
     }
 }

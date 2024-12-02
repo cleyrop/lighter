@@ -9,6 +9,7 @@ import tempfile
 import zipfile
 import requests
 import shutil
+from datetime import datetime
 from typing import Callable, Any, List, Dict
 from pathlib import Path
 from time import sleep
@@ -238,6 +239,7 @@ def main() -> int:
                 setup_output()
                 log.debug(f"Processing command {command}")
                 result = handler.exec(command)
+                result["finished_at"] = datetime.now().isoformat()
                 controller.write(command["id"], result)
                 log.debug("Response sent")
             sleep(0.25)
