@@ -81,12 +81,13 @@ public class JdbcStatementStorage implements StatementStorage, RowMapper<Stateme
 
     @Override
     @Transactional
-    public void update(String sessionId, String statementId, String state, Output output) {
-        jdbi.withHandle(handle -> handle.createUpdate("UPDATE application_statement SET state=:state, output=:output WHERE application_id=:application_id AND id=:id")
+    public void update(String sessionId, String statementId, String state, Output output, LocalDateTime finishedAt) {
+        jdbi.withHandle(handle -> handle.createUpdate("UPDATE application_statement SET state=:state, output=:output, finished_at=:finished_at WHERE application_id=:application_id AND id=:id")
                 .bind("application_id", sessionId)
                 .bind("id", statementId)
                 .bind("state", state)
                 .bind("output", outputToString(output))
+                .bind("finished_at", finishedAt != null ? Timestamp.valueOf(finishedAt) : null)
                 .execute());
     }
 
@@ -133,7 +134,8 @@ public class JdbcStatementStorage implements StatementStorage, RowMapper<Stateme
                 rs.getString("code"),
                 output,
                 rs.getString("state"),
-                rs.getTimestamp("created_at").toLocalDateTime()
+                rs.getTimestamp("created_at").toLocalDateTime(),
+                rs.getTimestamp("finished_at") != null ? rs.getTimestamp("finished_at").toLocalDateTime() : null
         );
     }
 

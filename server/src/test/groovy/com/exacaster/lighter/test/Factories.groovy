@@ -74,7 +74,7 @@ class Factories {
     }
 
     static statement() {
-        new Statement("id", "code", new Output("error", 1, [:], "evalue", "traceback"), "ok", null)
+        new Statement("id", "code", new Output("error", 1, [:], "evalue", "traceback"), "ok", null, null)
     }
 
     static kubernetesProperties() {
@@ -99,6 +99,6 @@ class Factories {
     }
 
     static newStatement() {
-        new Statement(null, "code", null, null, LocalDateTime.now())
+        new Statement(null, "code", null, null, LocalDateTime.now(), null)
     }
 }

@@ -1,0 +1,1 @@
+alter table application_statement add column finished_at timestamp;
