@@ -251,15 +251,17 @@ def main() -> int:
         TestController(session_id) if is_test else GatewayController(session_id)
     )
     handler = CommandHandler(init_globals(session_id))
-    executer = multiprocessing.Process(target=session_exec, args=(controller,handler,))
 
     log.info("Starting session loop")
     try:
+        executer = multiprocessing.Process(target=session_exec, args=(controller,handler,))
         executer.start()
         while True:
             if controller.cancel():
-                log.debug(f"Cancelling")
+                log.info(f"Cancelling {session_id}")
                 executer.terminate()
+                log.info(f"Restart {session_id}")
+                executer = multiprocessing.Process(target=session_exec, args=(controller,handler,))
                 executer.start()
             sleep(0.25)
     except Exception:
