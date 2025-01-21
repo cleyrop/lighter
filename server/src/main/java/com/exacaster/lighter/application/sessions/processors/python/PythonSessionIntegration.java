@@ -62,7 +62,7 @@ public class PythonSessionIntegration implements StatementHandler {
         var statementQueue = statementStorage.findByState(sessionId, "to_cancel");
         if (!statementQueue.isEmpty()) {
             LOG.info("Cancelling: {}", statementQueue);
-            statementQueue.forEach(st -> statementStorage.updateState(sessionId, st.getId(), "cancelled"));
+            statementQueue.forEach(st -> statementStorage.updateState(sessionId, st.getId(), "canceled"));
             return true;
         } else {
             return false;
