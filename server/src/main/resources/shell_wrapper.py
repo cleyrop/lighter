@@ -9,9 +9,10 @@ import tempfile
 import zipfile
 import requests
 import shutil
-from typing import Callable, Any, List, Dict
+from typing import Callable, Any, List, Dict, Optional
 from pathlib import Path
 from time import sleep
+from multiprocessing import Process
 
 
 sys_stdin = sys.stdin
@@ -49,6 +50,9 @@ class Controller:
     def write(self, _id: str, _result: Dict[str, Any]) -> None:
         pass
 
+    def cancel(self) -> bool:
+        return False
+
 
 class TestController(Controller):
     def read(self) -> List[Dict[str, Any]]:
@@ -56,6 +60,9 @@ class TestController(Controller):
 
     def write(self, id: str, result: Dict[str, Any]) -> None:
         retry(2, lambda: print(json.dumps(result), file=sys_stdout, flush=True))
+
+    def cancel(self) -> bool:
+        return False
 
 
 class GatewayController(Controller):
@@ -83,6 +90,9 @@ class GatewayController(Controller):
 
     def write(self, id: str, result: Dict[str, Any]) -> None:
         retry(3, lambda: self.endpoint.handleResponse(self.session_id, id, result))
+
+    def cancel(self) -> bool:
+        return retry(3, lambda: self.endpoint.cancelProcess(self.session_id))
 
 
 def is_url(words: str) -> bool:
@@ -222,6 +232,14 @@ def init_globals(name: str) -> Dict[str, Any]:
     return {"spark": spark}
 
 
+def session_exec(controller: Controller, handler: CommandHandler, command: Dict[str, Any]) -> None:
+    setup_output()
+    log.debug(f"Processing command {command}")
+    result = handler.exec(command)
+    controller.write(command["id"], result)
+    log.debug("Response sent")
+
+
 def main() -> int:
     setup_output()
     session_id = os.environ.get("LIGHTER_SESSION_ID", "")
@@ -230,16 +248,28 @@ def main() -> int:
         TestController(session_id) if is_test else GatewayController(session_id)
     )
     handler = CommandHandler(init_globals(session_id))
+    executor: Optional[Process] = None
 
     log.info("Starting session loop")
     try:
         while True:
-            for command in controller.read():
-                setup_output()
-                log.debug(f"Processing command {command}")
-                result = handler.exec(command)
-                controller.write(command["id"], result)
-                log.debug("Response sent")
+            if executor is None:
+                commands = controller.read()
+
+                if len(commands) > 0:
+                    log.info(f"Start executor for {session_id}")
+                    executor = Process(target=session_exec, args=(controller,handler,commands[0],))
+                    executor.start()
+
+            else:
+                if controller.cancel():
+                    log.info(f"Cancelling {session_id}")
+                    executor.terminate()
+
+                if not executor.is_alive():
+                    log.info(f"Executor for {session_id} is done")
+                    executor = None
+
             sleep(0.25)
 
     except Exception:
