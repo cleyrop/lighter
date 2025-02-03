@@ -5,6 +5,7 @@ import traceback
 import os
 import logging
 import re
+import gc
 import tempfile
 import zipfile
 import requests
@@ -232,12 +233,13 @@ def init_globals(name: str) -> Dict[str, Any]:
     return {"spark": spark}
 
 
-def session_exec(controller: Controller, handler: CommandHandler, command: Dict[str, Any]) -> None:
-    setup_output()
-    log.debug(f"Processing command {command}")
-    result = handler.exec(command)
-    controller.write(command["id"], result)
-    log.debug("Response sent")
+def session_exec(controller: Controller, handler: CommandHandler) -> None:
+    for command in controller.read():
+        setup_output()
+        log.debug(f"Processing command {command}")
+        result = handler.exec(command)
+        controller.write(command["id"], result)
+        log.debug("Response sent")
 
 
 def main() -> int:
@@ -254,21 +256,21 @@ def main() -> int:
     try:
         while True:
             if executor is None:
-                commands = controller.read()
-
-                if len(commands) > 0:
-                    log.info(f"Start executor for {session_id}")
-                    executor = Process(target=session_exec, args=(controller,handler,commands[0],))
-                    executor.start()
+                log.info(f"Start executor for {session_id}")
+                executor = Process(target=session_exec, args=(controller,handler,))
+                executor.start()
 
             else:
-                if controller.cancel():
+                cancel = controller.cancel()
+                if cancel is not None and cancel:
                     log.info(f"Cancelling {session_id}")
                     executor.terminate()
 
                 if not executor.is_alive():
                     log.info(f"Executor for {session_id} is done")
+                    executor.close()
                     executor = None
+                    gc.collect()
 
             sleep(0.25)
 
