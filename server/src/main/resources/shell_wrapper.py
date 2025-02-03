@@ -5,6 +5,7 @@ import traceback
 import os
 import logging
 import re
+import gc
 import tempfile
 import zipfile
 import requests
@@ -268,9 +269,9 @@ def main() -> int:
 
                 if not executor.is_alive():
                     log.info(f"Executor for {session_id} is done")
+                    executor.close()
                     executor = None
-
-            sleep(0.25)
+                    gc.collect()
 
     except Exception:
         log.exception("Error in main loop")
