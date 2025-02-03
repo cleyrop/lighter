@@ -5,6 +5,7 @@ import traceback
 import os
 import logging
 import re
+import gc
 import tempfile
 import zipfile
 import requests
@@ -262,13 +263,16 @@ def main() -> int:
                     executor.start()
 
             else:
-                if controller.cancel():
+                cancel = controller.cancel()
+                if cancel is not None and cancel:
                     log.info(f"Cancelling {session_id}")
                     executor.terminate()
 
                 if not executor.is_alive():
                     log.info(f"Executor for {session_id} is done")
+                    executor.close()
                     executor = None
+                    gc.collect()
 
             sleep(0.25)
 
