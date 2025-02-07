@@ -13,7 +13,7 @@ import shutil
 from typing import Callable, Any, List, Dict, Optional
 from pathlib import Path
 from time import sleep
-from multiprocessing import Process
+import asyncio
 
 
 sys_stdin = sys.stdin
@@ -51,8 +51,8 @@ class Controller:
     def write(self, _id: str, _result: Dict[str, Any]) -> None:
         pass
 
-    def cancel(self) -> bool:
-        return False
+    def cancel(self) -> List[str]:
+        return []
 
 
 class TestController(Controller):
@@ -62,8 +62,8 @@ class TestController(Controller):
     def write(self, id: str, result: Dict[str, Any]) -> None:
         retry(2, lambda: print(json.dumps(result), file=sys_stdout, flush=True))
 
-    def cancel(self) -> bool:
-        return False
+    def cancel(self) -> List[str]:
+        return []
 
 
 class GatewayController(Controller):
@@ -92,8 +92,11 @@ class GatewayController(Controller):
     def write(self, id: str, result: Dict[str, Any]) -> None:
         retry(3, lambda: self.endpoint.handleResponse(self.session_id, id, result))
 
-    def cancel(self) -> bool:
-        return retry(3, lambda: self.endpoint.cancelProcess(self.session_id))
+    def cancel(self) -> List[str]:
+        return retry(
+            3,
+            lambda: [ stmt.getId() for stmt in self.endpoint.cancelProcess(self.session_id) ],
+        )
 
 
 def is_url(words: str) -> bool:
@@ -233,18 +236,23 @@ def init_globals(name: str) -> Dict[str, Any]:
     return {"spark": spark}
 
 
-def session_exec(controller: Controller, handler: CommandHandler) -> None:
-    while True:
-        for command in controller.read():
-            setup_output()
-            log.debug(f"Processing command {command}")
-            result = handler.exec(command)
-            controller.write(command["id"], result)
-            log.debug("Response sent")
-        sleep(0.25)
+async def session_exec(controller: Controller, handler: CommandHandler, command: Dict[str, Any]):
+    try:
+        setup_output()
+        log.debug(f"Processing command {command}")
+        result = handler.exec(command)
+        controller.write(command["id"], result)
+        log.debug("Response sent")
+    except asyncio.CancelledError:
+        log.info("Cancelling command {str}")
+        controller.write(command["id"], )
+    except Exception as e:
+        message = f"Error: {str(e)}"
+        log.exception(message)
+        controller.write(command["id"], {"content": {"text/plain": message}})
 
 
-def main() -> int:
+async def main():
     setup_output()
     session_id = os.environ.get("LIGHTER_SESSION_ID", "")
     log.info(f"Initiating session {session_id}")
@@ -252,37 +260,35 @@ def main() -> int:
         TestController(session_id) if is_test else GatewayController(session_id)
     )
     handler = CommandHandler(init_globals(session_id))
-    executor: Optional[Process] = None
 
     log.info("Starting session loop")
-    try:
-        while True:
-            if executor is None:
-                log.info(f"Start executor for {session_id}")
-                executor = Process(target=session_exec, args=(controller,handler,))
-                executor.start()
 
-            else:
+    while True:
+        commands = controller.read()
+
+        while len(commands) > 0:
+            command = commands.pop(0)
+            log.info(f"Start execution for {session_id} {command.id}")
+            task = asyncio.create_task(session_exec(controller,handler,command))
+
+            while not task.done():
                 cancel = controller.cancel()
-                if cancel is not None and cancel:
+
+                if len(cancel) > 0:
                     log.info(f"Cancelling {session_id}")
-                    executor.terminate()
 
-                if not executor.is_alive():
-                    log.info(f"Executor for {session_id} is done")
-                    executor.close()
-                    executor = None
-                    gc.collect()
+                    if command.id in cancel:
+                        log.info(f"Cancelling {session_id} {command.id}")
+                        task.cancel()
+                        break
 
-            sleep(4)
+                    commands = [c for c in commands if c.id not in cancel]
 
-    except Exception:
-        log.exception("Error in main loop")
-        return 1
-    finally:
-        log.info("Exiting")
-    return 0
+                sleep(1)
+
+        gc.collect()
+        sleep(1)
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    asyncio.run(main())
