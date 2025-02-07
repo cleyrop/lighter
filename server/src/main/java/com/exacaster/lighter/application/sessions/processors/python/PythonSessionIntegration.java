@@ -58,15 +58,15 @@ public class PythonSessionIntegration implements StatementHandler {
     }
 
     // Used By Py4J
-    public boolean cancelProcess(String sessionId) {
+    public List<Statement> cancelProcess(String sessionId) {
         var statementQueue = statementStorage.findByState(sessionId, "to_cancel");
+
         if (!statementQueue.isEmpty()) {
             LOG.info("Cancelling: {}", statementQueue);
             statementQueue.forEach(st -> statementStorage.updateState(sessionId, st.getId(), "canceled"));
-            return true;
-        } else {
-            return false;
         }
+
+        return statementQueue;
     }
 
     private String string(Object obj) {
