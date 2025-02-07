@@ -1,4 +1,4 @@
-FROM eclipse-temurin:17-jdk-jammy as server
+FROM eclipse-temurin:17-jdk-jammy AS server
 
 ARG SPARK_VERSION=3.5.1
 ARG HADOOP_VERSION=3
@@ -9,7 +9,7 @@ COPY server/ ./server/
 WORKDIR /home/app/server/
 RUN ./gradlew build -x test -PSPARK_VERSION=${SPARK_VERSION}
 
-FROM node:lts-alpine3.18 as frontend
+FROM node:lts-alpine3.18 AS frontend
 
 ARG SPARK_VERSION=3.5.1
 ARG HADOOP_VERSION=3
@@ -53,10 +53,10 @@ ARG spark_gid=10001
 RUN groupadd -g ${spark_gid} spark && useradd spark -u ${spark_uid} -g ${spark_gid} -m -s /bin/bash
 RUN chown -R spark:spark ${SPARK_HOME} && \
     chmod -R go+rX ${SPARK_HOME}
-RUN apt-get update && apt-get upgrade -y && \
-    apt-get autoremove --purge -y curl wget && \
-    apt-get install -y --no-install-recommends --allow-downgrades -y atop procps && \
-    apt-get clean && rm -rf /var/lib/apt/lists /var/cache/apt/*
+RUN apt-get update && apt-get upgrade -y
+RUN apt-get autoremove --purge -y curl wget
+RUN apt-get install -y --no-install-recommends --allow-downgrades -y atop procps && apt-get clean
+RUN rm -rf /var/lib/apt/lists /var/cache/apt/*
 
 EXPOSE 8080
 EXPOSE 25333
