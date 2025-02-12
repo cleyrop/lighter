@@ -52,7 +52,8 @@ ARG spark_uid=10000
 ARG spark_gid=10001
 RUN groupadd -g ${spark_gid} spark && useradd spark -u ${spark_uid} -g ${spark_gid} -m -s /bin/bash
 RUN chown -R spark:spark ${SPARK_HOME} && \
-    chmod -R go+rX ${SPARK_HOME}
+    chmod -R go+rX ${SPARK_HOME} \
+RUN apk add --update qemu-x86_64
 RUN apt-get update && apt-get upgrade -y
 RUN apt-get autoremove --purge -y curl wget
 RUN apt-get install -y --no-install-recommends --allow-downgrades -y atop procps && apt-get clean
