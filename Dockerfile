@@ -26,7 +26,7 @@ RUN apk update; \
 WORKDIR /home/app/frontend/
 RUN yarn install && yarn build
 
-FROM eclipse-temurin:17.0.13_11-jre-jammy
+FROM eclipse-temurin:17-jre-noble
 
 ARG SPARK_VERSION=3.5.1
 ARG HADOOP_VERSION=3
