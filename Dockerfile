@@ -1,4 +1,4 @@
-FROM eclipse-temurin:17-jdk-jammy AS server
+FROM eclipse-temurin:17.0.13_11-jre-jammy AS server
 
 ARG SPARK_VERSION=3.5.1
 ARG HADOOP_VERSION=3
