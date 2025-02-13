@@ -10,10 +10,10 @@ import tempfile
 import zipfile
 import requests
 import shutil
-from typing import Callable, Any, List, Dict
+from typing import Callable, Any, List, Dict, Optional
 from pathlib import Path
 from time import sleep
-import asyncio
+from multiprocessing import Process, Queue
 
 
 sys_stdin = sys.stdin
@@ -118,6 +118,14 @@ def is_url(words: str) -> bool:
 class CommandHandler:
     def __init__(self, globals: Dict[str, Any]):
         self.globals = globals
+
+    def exec(self, request: Dict[str, str]) -> Dict[str, Any]:
+        return {}
+
+
+class ExecCommandHandler(CommandHandler):
+    def __init__(self, globals: Dict[str, Any]):
+        super().__init__(globals)
         self.code_file = "download"
 
     def _error_response(self, error: Exception) -> Dict[str, Any]:
@@ -236,31 +244,60 @@ def init_globals(name: str) -> Dict[str, Any]:
     return {"spark": spark}
 
 
-async def session_exec(controller: Controller, handler: CommandHandler, command: Dict[str, Any]):
-    try:
-        setup_output()
-        log.info(f"Processing command {command}")
-        result = handler.exec(command)
-        controller.write(command["id"], result)
-        log.info("Response sent")
-    except asyncio.CancelledError:
-        message = f"Cancelling command {str}"
-        log.error(message)
-        controller.write(command["id"], {"content": {"text/plain": message}})
-    except Exception as e:
-        message = f"Error: {str(e)}"
-        log.error(message)
-        controller.write(command["id"], {"content": {"text/plain": message}})
+def session_exec(
+    controller: Controller,
+    handler: CommandHandler,
+    command_queue: Queue,
+    finished_queue: Queue
+) -> None:
+    while True:
+        command = command_queue.get()
+
+        if command is not None:
+            command_id = command["id"]
+
+            try:
+                setup_output()
+                log.info(f"Processing command {command}")
+                result = handler.exec(command)
+                controller.write(command_id, result)
+                log.info("Response sent")
+            except Exception as e:
+                message = f"Error: {str(e)}"
+                log.error(message)
+                controller.write(command_id, {"content": {"text/plain": message}})
+            finally:
+                finished_queue.put({ "success": command_id })
+
+        sleep(1)
 
 
-async def main():
-    setup_output()
-    session_id = os.environ.get("LIGHTER_SESSION_ID", "")
-    log.info(f"Initiating session {session_id}")
-    controller = (
-        TestController(session_id) if is_test else GatewayController(session_id)
+def session_canceller(
+    controller: Controller,
+    finished_queue: Queue
+) -> None:
+    while True:
+        cancel = controller.cancel()
+
+        if cancel is not None and len(cancel) > 0:
+            finished_queue.put({ "cancel": cancel })
+
+        sleep(1)
+
+
+def session_running(
+    session_id: str,
+    controller: Controller,
+    handler: CommandHandler
+) -> None:
+    executor: Optional[Process] = None
+    command_queue = Queue()
+    finished_queue = Queue()
+    canceller = Process(
+        target=session_canceller,
+        args=(controller, finished_queue)
     )
-    handler = CommandHandler(init_globals(session_id))
+    canceller.start()
 
     log.info("Starting session loop")
 
@@ -273,31 +310,54 @@ async def main():
                     command = commands[0]
                     commands = commands[1:]
                     command_id = command["id"]
-                    log.info(f"Start execution for {session_id} {command_id}")
-                    task = asyncio.to_thread(session_exec, controller, handler, command)
-                    await asyncio.sleep(1)
+                    command_queue.put(command)
 
-                    while not task.done():
-                        cancel = controller.cancel()
+                    if executor is None:
+                        log.info(f"Start execution for {session_id}")
+                        executor = Process(
+                            target=session_exec,
+                            args=(controller, handler, command_queue, finished_queue),
+                        )
+                        executor.start()
 
-                        if cancel is not None and len(cancel) > 0:
-                            log.info(f"Cancelling {session_id}")
+                    while True:
+                        msg = finished_queue.get()
+                        log.info(f"Receive response {msg}")
 
-                            if command_id in cancel:
-                                log.info(f"Cancelling {session_id} {command_id}")
-                                task.cancel()
-                                break
+                        if msg["success"] == command_id:
+                            break
 
-                            commands = [c for c in commands if c["id"] not in cancel]
+                        cancel = msg["cancel"]
+                        log.info(f"Cancelling {session_id} {cancel}")
 
-                        await asyncio.sleep(1)
+                        if command_id in cancel:
+                            log.info(f"Cancelling {session_id} {command_id}")
+                            executor.terminate()
+                            executor.close()
+                            executor = None
+                            break
+
+                        log.info(f"Cancelling command is not run yet filter processing commands")
+                        commands = [c for c in commands if c["id"] not in cancel]
+
 
         except Exception as e:
             log.exception(e)
 
         gc.collect()
-        await asyncio.sleep(1)
+        sleep(1)
+
+
+def main() -> int:
+    setup_output()
+    session_id = os.environ.get("LIGHTER_SESSION_ID", "")
+    log.info(f"Initiating session {session_id}")
+    controller = (
+        TestController(session_id) if is_test else GatewayController(session_id)
+    )
+    handler = ExecCommandHandler(init_globals(session_id))
+    session_running(session_id, controller, handler)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    sys.exit(main())
