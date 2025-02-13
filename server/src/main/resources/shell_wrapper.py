@@ -274,7 +274,7 @@ async def main():
                     commands = commands[1:]
                     command_id = command["id"]
                     log.info(f"Start execution for {session_id} {command_id}")
-                    task = asyncio.create_task(session_exec(controller,handler,command))
+                    task = asyncio.to_thread(session_exec, controller, handler, command)
                     await asyncio.sleep(1)
 
                     while not task.done():
