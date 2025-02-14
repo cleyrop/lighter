@@ -5,6 +5,7 @@ import traceback
 import os
 import logging
 import re
+import gc
 import tempfile
 import zipfile
 import requests
@@ -12,7 +13,7 @@ import shutil
 from typing import Callable, Any, List, Dict, Optional
 from pathlib import Path
 from time import sleep
-from multiprocessing import Process
+from multiprocessing import Process, Queue
 
 
 sys_stdin = sys.stdin
@@ -50,8 +51,8 @@ class Controller:
     def write(self, _id: str, _result: Dict[str, Any]) -> None:
         pass
 
-    def cancel(self) -> bool:
-        return False
+    def cancel(self) -> List[str]:
+        return []
 
 
 class TestController(Controller):
@@ -61,8 +62,8 @@ class TestController(Controller):
     def write(self, id: str, result: Dict[str, Any]) -> None:
         retry(2, lambda: print(json.dumps(result), file=sys_stdout, flush=True))
 
-    def cancel(self) -> bool:
-        return False
+    def cancel(self) -> List[str]:
+        return []
 
 
 class GatewayController(Controller):
@@ -91,8 +92,11 @@ class GatewayController(Controller):
     def write(self, id: str, result: Dict[str, Any]) -> None:
         retry(3, lambda: self.endpoint.handleResponse(self.session_id, id, result))
 
-    def cancel(self) -> bool:
-        return retry(3, lambda: self.endpoint.cancelProcess(self.session_id))
+    def cancel(self) -> List[str]:
+        return retry(
+            3,
+            lambda: [ stmt.getId() for stmt in self.endpoint.cancelProcess(self.session_id) ],
+        )
 
 
 def is_url(words: str) -> bool:
@@ -232,12 +236,17 @@ def init_globals(name: str) -> Dict[str, Any]:
     return {"spark": spark}
 
 
-def session_exec(controller: Controller, handler: CommandHandler, command: Dict[str, Any]) -> None:
-    setup_output()
-    log.debug(f"Processing command {command}")
-    result = handler.exec(command)
-    controller.write(command["id"], result)
-    log.debug("Response sent")
+def session_exec(controller: Controller, handler: CommandHandler, command_queue: Queue, result_queue: Queue) -> None:
+    while True:
+        command = command_queue.get()
+
+        if command is not None:
+            setup_output()
+            log.debug(f"Processing command {command}")
+            result = handler.exec(command)
+            controller.write(command["id"], result)
+            result_queue.put(command["id"])
+            log.debug("Response sent")
 
 
 def main() -> int:
@@ -249,26 +258,40 @@ def main() -> int:
     )
     handler = CommandHandler(init_globals(session_id))
     executor: Optional[Process] = None
+    execution_in_progress = False
+    command_queue = Queue()
+    result_queue = Queue()
 
     log.info("Starting session loop")
     try:
         while True:
             if executor is None:
+                log.info(f"Start executor for {session_id}")
+                executor = Process(target=session_exec, args=(controller,handler,command_queue,result_queue,))
+                executor.start()
+
+            if not execution_in_progress:
                 commands = controller.read()
 
-                if len(commands) > 0:
-                    log.info(f"Start executor for {session_id}")
-                    executor = Process(target=session_exec, args=(controller,handler,commands[0],))
-                    executor.start()
+                if commands is not None and len(commands) > 0:
+                    execution_in_progress = True
+                    command_queue.put(commands[0])
 
             else:
-                if controller.cancel():
-                    log.info(f"Cancelling {session_id}")
-                    executor.terminate()
+                try:
+                    result_queue.get_nowait()
+                    execution_in_progress = False
 
-                if not executor.is_alive():
-                    log.info(f"Executor for {session_id} is done")
-                    executor = None
+                except multiprocessing.queues.Empty:
+                    cancels = controller.cancel()
+
+                    if cancels is not None and len(cancels) > 0:
+                        log.info(f"Cancelling {session_id}")
+                        executor.terminate()
+
+                    if not executor.is_alive():
+                        log.info(f"Executor for {session_id} is done")
+                        executor = None
 
             sleep(0.25)
 
@@ -278,7 +301,6 @@ def main() -> int:
     finally:
         log.info("Exiting")
     return 0
-
 
 if __name__ == "__main__":
     sys.exit(main())
