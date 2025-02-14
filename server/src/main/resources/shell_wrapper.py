@@ -13,7 +13,7 @@ import shutil
 from typing import Callable, Any, List, Dict, Optional
 from pathlib import Path
 from time import sleep
-from multiprocessing import Process, Queue
+from multiprocessing import Process
 
 
 sys_stdin = sys.stdin
@@ -236,57 +236,20 @@ def init_globals(name: str) -> Dict[str, Any]:
     return {"spark": spark}
 
 
-def session_exec(controller: Controller, handler: CommandHandler, command_queue: Queue, finished_queue: Queue) -> None:
+def session_exec(controller: Controller, handler: CommandHandler) -> None:
     while True:
-        command = command_queue.get()
-
-        if command is not None:
-            command_id = command["id"]
-
-            try:
+        try:
+            for command in controller.read():
                 setup_output()
-                log.info(f"Processing command {command}")
+                log.debug(f"Processing command {command}")
                 result = handler.exec(command)
-                controller.write(command_id, result)
-                log.info("Response sent")
-            except Exception as e:
-                message = f"Error: {str(e)}"
-                log.error(message)
-                controller.write(command_id, {"content": {"text/plain": message}})
-            finally:
-                finished_queue.put({ "success": command_id })
+                controller.write(command["id"], result)
+                log.debug("Response sent")
 
-        sleep(1)
+        except Exception:
+            log.exception("Error in exec loop")
 
-
-def session_canceller(controller: Controller, finished_queue: Queue) -> None:
-    while True:
-        cancel = controller.cancel()
-
-        if cancel is not None and len(cancel) > 0:
-            finished_queue.put({ "cancel": cancel })
-
-        sleep(1)
-
-
-def init_executor(session_id: str, controller: Controller, handler: CommandHandler, command_queue: Queue, finished_queue: Queue) -> Process :
-    log.info(f"Start execution for {session_id}")
-    executor = Process(
-        target=session_exec,
-        args=(controller, handler, command_queue, finished_queue),
-    )
-    executor.start()
-    return executor
-
-
-def init_canceler(session_id: str, controller: Controller, finished_queue: Queue) -> Process:
-    log.info(f"Start canceler for {session_id}")
-    canceller = Process(
-        target=session_canceller,
-        args=(controller, finished_queue)
-    )
-    canceller.start()
-    return canceller
+        sleep(0.25)
 
 
 def main() -> int:
@@ -297,52 +260,33 @@ def main() -> int:
         TestController(session_id) if is_test else GatewayController(session_id)
     )
     handler = CommandHandler(init_globals(session_id))
-    command_queue = Queue()
-    finished_queue = Queue()
-    executor: Optional[Process] = init_executor(session_id, controller, handler, command_queue, finished_queue)
-    canceler = init_canceler(session_id, controller, finished_queue)
+    executor: Optional[Process] = None
 
     log.info("Starting session loop")
     while True:
+        if executor is None:
+            log.info(f"Start execution for {session_id}")
+            executor = Process(
+                target=session_exec,
+                args=(controller, handler),
+            )
+            executor.start()
+
+
         try:
-            commands = controller.read()
+            cancel = controller.cancel()
 
-            if commands is not None and len(commands) > 0:
-                while len(commands) > 0:
-                    command = commands[0]
-                    commands = commands[1:]
-                    command_id = command["id"]
-                    command_queue.put(command)
+            if cancel is not None and len(cancel) > 0:
+                log.info(f"Cancelling {session_id}")
+                executor.terminate()
+                executor.close()
+                executor = None
 
-                    if executor is None:
-                        init_executor(session_id, controller, handler, command_queue, finished_queue)
-
-                    while True:
-                        msg = finished_queue.get()
-                        log.info(f"Receive response {msg}")
-
-                        if msg["success"] == command_id:
-                            break
-
-                        cancel = msg["cancel"]
-                        log.info(f"Cancelling {session_id} {cancel}")
-
-                        if command_id in cancel:
-                            log.info(f"Cancelling {session_id} {command_id}")
-                            executor.terminate()
-                            executor.close()
-                            executor = None
-                            break
-
-                        log.info(f"Cancelling command is not run yet filter processing commands")
-                        commands = [c for c in commands if c["id"] not in cancel]
-
-
-        except Exception as e:
-            log.exception(e)
+        except Exception:
+            log.exception("Error in cancel call")
 
         gc.collect()
-        sleep(1)
+        sleep(0.25)
 
     return 0
 
