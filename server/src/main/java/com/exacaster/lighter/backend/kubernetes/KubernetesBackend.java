@@ -117,6 +117,7 @@ public class KubernetesBackend implements Backend {
     }
 
     private ApplicationState mapStatus(PodStatus status) {
+        LOG.warn("application state have phase: {}, reason : {}", status.getPhase(), status.getReason());
         switch (status.getPhase()) {
             case "Unknown":
             case "Pending":
