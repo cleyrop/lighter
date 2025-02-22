@@ -13,6 +13,7 @@ import io.micronaut.runtime.event.annotation.EventListener;
 import io.micronaut.scheduling.annotation.Async;
 import jakarta.inject.Singleton;
 import java.net.InetSocketAddress;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -37,6 +38,8 @@ public class PythonSessionIntegration implements StatementHandler {
         var statementQueue = statementStorage.findByState(id, "waiting");
         if (!statementQueue.isEmpty()) {
             LOG.info("Waiting: {}", statementQueue);
+            statementQueue = statementQueue.subList(0, 1);
+            statementQueue.forEach(st -> statementStorage.updateState(id, st.getId(), "processing"));
         }
         return statementQueue;
     }
@@ -54,7 +57,8 @@ public class PythonSessionIntegration implements StatementHandler {
                 string(result.get("traceback"))
         );
         var status = error != null ? "error" : "available";
-        statementStorage.update(sessionId, statementId, status, output);
+        var finishedDate = LocalDateTime.parse(string(result.get("finished_at")));
+        statementStorage.update(sessionId, statementId, status, output, finishedDate);
     }
 
     // Used By Py4J

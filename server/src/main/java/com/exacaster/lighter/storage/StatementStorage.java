@@ -2,6 +2,8 @@ package com.exacaster.lighter.storage;
 
 import com.exacaster.lighter.application.sessions.Statement;
 import com.exacaster.lighter.application.sessions.processors.Output;
+
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -15,7 +17,7 @@ public interface StatementStorage {
 
     Optional<Statement> findLatest(String sessionId);
 
-    void update(String sessionId, String statementId, String state, Output output);
+    void update(String sessionId, String statementId, String state, Output output, LocalDateTime finishedDate);
 
     Statement create(String sessionId, Statement statement);
 }
